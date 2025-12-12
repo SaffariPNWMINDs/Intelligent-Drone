@@ -14,9 +14,14 @@ def run_cmd(cmd):
     Args:
         cmd: Command string to execute
     """
-    return subprocess.run(cmd, shell=True, check=False,
-                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                          text=True)
+    return subprocess.run(
+        cmd,
+        shell=True,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
 
 def get_bt_card_name():
     """Gets the PulseAudio card name for the Bluetooth headset."""
@@ -79,7 +84,7 @@ def set_card_profile(cardName, profile):
     return result.returncode == 0
 
 def reconnect_headset():
-    """Disconnects and reconnects the Bluetooth headset to ensure MAC address appears."""
+    """Disconnect and reconnect Bluetooth headset to ensure MAC appears."""
     mac = HEADSET_MAC.replace("_", ":")
     run_cmd(f"bluetoothctl disconnect {mac}")
     time.sleep(1.0)
@@ -87,7 +92,7 @@ def reconnect_headset():
     time.sleep(1.0)
 
 def ensure_headset_profile():
-    """Ensures the Bluetooth headset card is in headset_head_unit profile."""
+    """Ensure the Bluetooth headset card is in headset_head_unit profile."""
     # Check PulseAudio server is up
     info = run_cmd("pactl info")
     if info.returncode != 0:
@@ -105,18 +110,21 @@ def ensure_headset_profile():
             time.sleep(0.25)
     
     if not card:
-        return False, None, "Bluetooth headset card not found (is it connected/trusted?)."
+        msg = "Bluetooth headset card not found (is it connected/trusted?)."
+        return False, None, msg
 
     # Get active profile
     active = get_card_active_profile(card)
     if active != DESIRED_PROFILE:
         if not set_card_profile(card, DESIRED_PROFILE):
-            return False, None, f"Failed to set profile {DESIRED_PROFILE} on {card}."
+            msg = f"Failed to set profile {DESIRED_PROFILE} on {card}."
+            return False, None, msg
     
     # After changing profile, check source to ensure it's available
     time.sleep(0.5)
     src = get_headset_source_name()
     if not src:
-        return False, None, "Headset mic source not found even after switching profile."
+        msg = "Headset mic source not found even after switching profile."
+        return False, None, msg
 
     return True, src, f"Using mic source: {src}"

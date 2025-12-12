@@ -23,6 +23,97 @@ from .state import (
     set_ned_position
 )
 
+async def check_armed_state(drone):
+    """
+    Check if the drone is armed.
+    Args:
+        drone: The drone instance
+    """
+    try:
+        async for armed in drone.telemetry.armed():
+            return armed
+    except Exception as e:
+        log_error("Error checking armed state", e)
+        return False
+
+async def check_in_air(drone):
+    """
+    Check if the drone is in the air.
+    Args:
+        drone: The drone instance
+    """
+    try:
+        async for inAir in drone.telemetry.in_air():
+            return inAir
+    except Exception as e:
+        log_error("Error checking in-air state", e)
+        return False
+
+async def check_gps_fix(drone):
+    """
+    Check if the drone has a valid GPS fix.
+    Args:
+        drone: The drone instance
+    """
+    try:
+        async for gpsInfo in drone.telemetry.gps_info():
+            # GPS fix type: 0 = No GPS, 1 = No Fix, 2 = 2D Fix, 3 = 3D Fix
+            hasFix = gpsInfo.fix_type >= 3
+            numSatellites = gpsInfo.num_satellites
+            return (hasFix, numSatellites)
+    except Exception as e:
+        log_error("Error checking GPS fix", e)
+        return (False, 0)
+
+async def check_home_position(drone):
+    """
+    Check if the home position has been set.
+    Args:
+        drone: The drone instance
+    """
+    try:
+        async for home in drone.telemetry.home():
+            # If home position exists and has valid coordinates
+            hasHome = (home.latitude_deg != 0.0 or home.longitude_deg != 0.0)
+            return hasHome
+    except Exception as e:
+        log_error("Error checking home position", e)
+        return False
+
+async def check_flight_mode(drone):
+    """
+    Check the current flight mode of the drone.
+    Args:
+        drone: The drone instance
+    """
+    try:
+        async for flightMode in drone.telemetry.flight_mode():
+            return str(flightMode)
+    except Exception as e:
+        log_error("Error checking flight mode", e)
+        return "UNKNOWN"
+
+async def check_health_status(drone):
+    """
+    Check overall health status of the drone.
+    Args:
+        drone: The drone instance
+    """
+    try:
+        async for health in drone.telemetry.health():
+            healthStatus = {
+                'is_gyrometer_calibration_ok': health.is_gyrometer_calibration_ok,
+                'is_accelerometer_calibration_ok': health.is_accelerometer_calibration_ok,
+                'is_magnetometer_calibration_ok': health.is_magnetometer_calibration_ok,
+                'is_local_position_ok': health.is_local_position_ok,
+                'is_global_position_ok': health.is_global_position_ok,
+                'is_home_position_ok': health.is_home_position_ok
+            }
+            return healthStatus
+    except Exception as e:
+        log_error("Error checking health status", e)
+        return None
+
 async def execute_command(cmdType, distVal, distType):
     """
     Executes a command from COMMAND_LOOKUP.
@@ -76,25 +167,77 @@ async def execute_command(cmdType, distVal, distType):
                 return
 
         # Execute basic commands
-        if cmdType == "STOP":
+        if cmdType == "ARM":
+            log_command("ARM")
+            await asyncio.wait_for(drone.action.arm(), timeout=ACTION_TIMEOUT)
+        elif cmdType == "STOP":
+            # Check if drone is armed and in the air before holding position
+            isArmed = await check_armed_state(drone)
+            if not isArmed:
+                log_error("Cannot execute STOP: Drone is not armed.")
+                return
+            
+            isInAir = await check_in_air(drone)
+            if not isInAir:
+                log_error("Cannot execute STOP: Drone is not in the air.")
+                return
+            
             log_command("STOP")
             await asyncio.wait_for(drone.action.hold(), timeout=ACTION_TIMEOUT)
+
         elif cmdType == "RETURN":
+            # Check if drone is armed before returning to launch
+            isArmed = await check_armed_state(drone)
+            if not isArmed:
+                log_error("Cannot return: Drone is not armed.")
+                return
+            
+            # Check if drone is in the air
+            isInAir = await check_in_air(drone)
+            if not isInAir:
+                log_error("Cannot return: Drone is not in the air.")
+                return
+            
             log_command("RETURN")
             await asyncio.wait_for(drone.action.return_to_launch(), timeout=ACTION_TIMEOUT)
         elif cmdType == "SHUTDOWN":
             log_command("SHUTDOWN")
             return "SHUTDOWN"
         elif cmdType == "LAND":
+            # Check if drone is armed before landing
+            isArmed = await check_armed_state(drone)
+            if not isArmed:
+                log_error("Cannot land: Drone is not armed.")
+                return
+            
+            # Check if drone is in the air
+            isInAir = await check_in_air(drone)
+            if not isInAir:
+                log_error("Cannot land: Drone is already on the ground.")
+                return
+            
             log_command("LAND")
             await asyncio.wait_for(drone.action.land(), timeout=ACTION_TIMEOUT)
         elif cmdType == "DISARM":
+            # Safety check: Do not disarm while in the air
+            isInAir = await check_in_air(drone)
+            if isInAir:
+                log_error("Cannot disarm: Drone is in the air. Please land first.")
+                return
+            
             log_command("DISARM")
             await asyncio.wait_for(drone.action.disarm(), timeout=ACTION_TIMEOUT)
-        elif cmdType == "ARM":
-            log_command("ARM")
-            await asyncio.wait_for(drone.action.arm(), timeout=ACTION_TIMEOUT)
         elif cmdType == "TAKEOFF":
+            # Check if drone is armed before takeoff
+            isArmed = await check_armed_state(drone)
+            if not isArmed:
+                log_error("Cannot takeoff: Drone is not armed. Please arm the drone first.")
+                return
+            
+            # Log current flight mode
+            currentMode = await check_flight_mode(drone)
+            log_event(f"Takeoff initiated in flight mode: {currentMode}")
+            
             if distMeters:
                 log_command("TAKEOFF", distVal, distType)
                 await asyncio.wait_for(drone.action.set_takeoff_altitude(distMeters), timeout=ACTION_TIMEOUT)
@@ -106,6 +249,17 @@ async def execute_command(cmdType, distVal, distType):
         
         # Execute movement commands
         elif cmdType in ("FORWARD", "BACKWARD", "UP", "DOWN", "LEFT", "RIGHT"):
+            # Check if drone is armed and in the air before movement
+            isArmed = await check_armed_state(drone)
+            if not isArmed:
+                log_error(f"Cannot execute {cmdType}: Drone is not armed.")
+                return
+            
+            isInAir = await check_in_air(drone)
+            if not isInAir:
+                log_error(f"Cannot execute {cmdType}: Drone is not in the air. Please take off first.")
+                return
+            
             if distMeters:
                 log_command(f"MOVE {cmdType}", distVal, distType)
                 await asyncio.wait_for(execute_movement_command(cmdType, distMeters), timeout=MOVEMENT_TIMEOUT)
@@ -115,6 +269,17 @@ async def execute_command(cmdType, distVal, distType):
         
         # Execute rotation commands
         elif cmdType in ("RO_LEFT", "RO_RIGHT"):
+            # Check if drone is armed and in the air before rotation
+            isArmed = await check_armed_state(drone)
+            if not isArmed:
+                log_error(f"Cannot execute {cmdType}: Drone is not armed.")
+                return
+            
+            isInAir = await check_in_air(drone)
+            if not isInAir:
+                log_error(f"Cannot execute {cmdType}: Drone is not in the air. Please take off first.")
+                return
+            
             log_command(cmdType, distVal or 90, "degrees")
             await asyncio.wait_for(execute_rotation_command(cmdType, distMeters or 90), timeout=MOVEMENT_TIMEOUT)
         
@@ -253,6 +418,32 @@ async def _initialize_offboard(drone):
     Args:
         drone: The drone instance
     """
+    # Verify drone is armed before starting offboard mode
+    isArmed = await check_armed_state(drone)
+    if not isArmed:
+        log_error("Cannot start offboard mode: Drone is not armed.")
+        return
+    
+    # Verify drone is in the air before starting offboard mode
+    isInAir = await check_in_air(drone)
+    if not isInAir:
+        log_error("Cannot start offboard mode: Drone is not in the air.")
+        return
+    
+    # Log current flight mode before switching to offboard
+    currentMode = await check_flight_mode(drone)
+    log_event(f"Switching from {currentMode} to OFFBOARD mode")
+    
+    # Get current yaw to maintain heading
+    yaw = 0.0
+    try:
+        async for attitude in drone.telemetry.attitude_euler():
+            yaw = attitude.yaw_deg
+            break
+    except Exception as e:
+        log_error("Error getting current yaw for offboard init", e)
+        yaw = 0.0
+    
     # Attempt to get current NED position from telemetry
     try:
         async for position_velocity in drone.telemetry.position_velocity_ned():
@@ -270,10 +461,10 @@ async def _initialize_offboard(drone):
     
     set_ned_position(nedPos)
 
-    # Synchronize drone to current NED position, then start offboard mode
+    # Synchronize drone to current NED position and yaw, then start offboard mode
     await asyncio.wait_for(
         drone.offboard.set_position_ned(PositionNedYaw(
-            nedPos[0], nedPos[1], nedPos[2], 0.0)),
+            nedPos[0], nedPos[1], nedPos[2], yaw)),
         timeout=OFFBOARD_TIMEOUT
     )
     await asyncio.wait_for(drone.offboard.start(), timeout=OFFBOARD_TIMEOUT)

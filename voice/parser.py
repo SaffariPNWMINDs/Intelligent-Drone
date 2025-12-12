@@ -11,18 +11,18 @@ from config import (
     NUM_DICT
 )
 
-def parse_commands(input):
+def parse_commands(userInput):
     """
     Parse input into command(s).
     Args:
-        input: String of recognized speech
+        userInput: String of recognized speech
     """
-    if not input:
+    if not userInput:
         return []
     
     # Split input into potential commands using separators
     try:
-        commands = SEPARATOR_PATTERN.split(input.lower())
+        commands = SEPARATOR_PATTERN.split(userInput.lower())
 
         # Sort through commands and parse each
         parsedCommands = []
@@ -74,25 +74,26 @@ def get_command(command):
         print(f"Error extracting command: {e}")
         return (None, None, None)
     
-def extract_values(input):
+def extract_values(userInput):
     """
     Extract distance and unit from remaining command string.
     Args:
-        input: Remaining lowercase command string after extracting command type
+        userInput: Remaining lowercase command string after extracting
+                   command type
     """
-    if not input:
+    if not userInput:
         return (None, None)
-    
+
     try:
-        input = input.strip()
+        userInput = userInput.strip()
         
         # Extract numeric value - check digits first (most common case)
         distVal = None
-        digitMatch = DIGIT_PATTERN.search(input)
+        digitMatch = DIGIT_PATTERN.search(userInput)
         if digitMatch:
             distVal = int(digitMatch.group())
         else:
-            words = input.split()
+            words = userInput.split()
             total = 0
             for word in words:
                 if word in NUM_DICT:
@@ -104,7 +105,7 @@ def extract_values(input):
         # Extract unit type
         distType = None
         for unit, pattern in UNIT_PATTERNS.items():
-            if pattern.search(input):
+            if pattern.search(userInput):
                 distType = unit
                 break
         

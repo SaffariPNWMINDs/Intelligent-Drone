@@ -7,11 +7,23 @@ DO NOT EDIT ANY OTHER PART OF THIS FILE.
 import re
 
 # Editable parameters:
-SIM_MODE = True     # Set to True for simulation mode, False for real drone
+SIM_MODE = True # Set to True for simulation mode, False for real drone control
 
-MODEL_LOCATION = r"C:\Senior Design\vosk-model-small-en-us-0.15"  # Absolute path to vosk model
+# Absolute path to vosk model
+MODEL_LOCATION = r"/absolute/path/to/vosk-model-small-en-us-0.15"
 
-HEADSET_MAC = "40_58_99_5B_08_79"  # Headset MAC address fragment
+# Headset MAC address fragment
+HEADSET_MAC = "XX_XX_XX_XX_XX_XX"
+
+# Drone connection path (Update else clause as needed)
+if SIM_MODE:
+    DRONE_CONNECTION_PATH = "udp://:14540"
+else:
+    DRONE_CONNECTION_PATH = "serial:///dev/ttyTHS1:57600"
+
+# When adding noise to audio (for testing purposes)
+NOISE_TESTING = False   # Set to True to enable noise addition
+SNR_DB = 20.0           # Desired Signal-to-Noise Ratio in dB
 
 # Connection and timeout settings (in seconds)
 CONNECTION_TIMEOUT = 45.0       # Initial drone connection
@@ -28,20 +40,23 @@ RETRY_BACKOFF_MULTIPLIER = 2.0  # Multiplier for exponential backoff delay
 AUDIO_FORMAT = "paInt16"        # Audio format (review PyAudio documentation for other options)
 AUDIO_CHANNELS = 1              # Number of audio channels (1 for mono, 2 for stereo)
 AUDIO_RATE = 16000              # Audio sample rate (Hz)
-AUDIO_BUFFER_SIZE = 4096        # Number of audio frames per buffer
+AUDIO_BUFFER_SIZE = 2048        # Number of audio frames per buffer
 PROCESS_INTERVAL = 0.1          # Minimum time between audio processing cycles (seconds)
-
-# Drone connection path (Update else clause as needed)
-DRONE_CONNECTION_PATH = "udp://:14540" if SIM_MODE else "serial:///dev/ttyUSB0:115200"
 
 """DO NOT EDIT BELOW THIS LINE"""
 # Pre-compiled regex patterns
-DIGIT_PATTERN = re.compile(r'\d+')                      # Digits
-                                                        # Command separators
-SEPARATOR_PATTERN = re.compile(r'(?:,\s*(?:then\s+|and\s+|next\s+)?|,?\s+(?:then|and|next|after\s+that|followed\s+by|afterward)\s+)')
-UNIT_PATTERNS = {                                       # Measurement units
+DIGIT_PATTERN = re.compile(r'\d+')  # Digits
+
+# Command separators
+SEPARATOR_PATTERN = re.compile(
+    r'(?:,\s*(?:then\s+|and\s+|next\s+)?'
+    r'|,?\s+(?:then|and|next|after\s+that|followed\s+by|afterward)\s+)'
+)
+
+# Measurement units
+UNIT_PATTERNS = {
     'inches': re.compile(r'\b(?:inch|inches)\b'),
-    'feet': re.compile(r'\b(?:feet|foot)\b'), 
+    'feet': re.compile(r'\b(?:feet|foot)\b'),
     'yards': re.compile(r'\b(?:yard|yards)\b'),
     'degrees': re.compile(r'\b(?:degree|degrees)\b')
 }
@@ -64,7 +79,13 @@ COMMAND_DICT = {
     "ARM":      ["arm", "arm drone"],
     "SHUTDOWN": ["shutdown", "power off"],
 }
-COMMAND_LOOKUP = {trigger: cmdType for cmdType, triggers in COMMAND_DICT.items() for trigger in triggers}
+
+# Condensed dictionary for faster lookup
+COMMAND_LOOKUP = {
+    trigger: cmdType
+    for cmdType, triggers in COMMAND_DICT.items()
+    for trigger in triggers
+}
 
 # Dictionary of integer variables for command parameters
 NUM_DICT = {

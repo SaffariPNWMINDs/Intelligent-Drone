@@ -1,4 +1,5 @@
 vosk>=0.3.45
 pyaudio>=0.2.11
 mavsdk>=1.4.10
+numpy>=1.19.0
 asyncio

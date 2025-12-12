@@ -7,8 +7,7 @@ Please refer to README.md for setup and usage instructions before running this s
 import asyncio
 import time
 import subprocess
-import sys
-from config import SIM_MODE, PROCESS_INTERVAL, AUDIO_BUFFER_SIZE
+from config import PROCESS_INTERVAL, AUDIO_BUFFER_SIZE
 from logger import (
     initialize_logger,
     cleanup_logger,
@@ -86,9 +85,15 @@ async def process_voice_commands():
             
             # Read and process audio with error handling
             try:
-                data = stream.read(AUDIO_BUFFER_SIZE, exception_on_overflow=False)  # Captured audio data
-                command = process_audio(rec, data)                                  # Recognized command from audio data
-            
+                # Captured audio data
+                data = stream.read(
+                    AUDIO_BUFFER_SIZE,
+                    exception_on_overflow=False
+                )
+
+                # Recognized command from audio data
+                command = process_audio(rec, data)
+
             # General exception handling 
             except Exception as audioError:
                 log_error("Audio read error", audioError)
@@ -104,7 +109,11 @@ async def process_voice_commands():
                     # Fast path for stop commands
                     parsedCommands = parse_commands(command)
                     if parsedCommands and parsedCommands[0][0] == "STOP":
-                        log_event("STOP command received. Interrupting current operation.")
+                        msg = (
+                            "STOP command received. "
+                            "Interrupting current operation."
+                        )
+                        log_event(msg)
                         set_stop_requested(True)
                         continue
                 
@@ -113,10 +122,13 @@ async def process_voice_commands():
                     parsedCommands = parse_commands(command)
 
                     if parsedCommands:
-                        # Create task to execute commands without blocking audio loop
-                        asyncio.create_task(execute_command_chain(parsedCommands))
+                        # Create task to execute commands without blocking
+                        # audio loop
+                        task = execute_command_chain(parsedCommands)
+                        asyncio.create_task(task)
                     else:
-                        log_message(f"No valid commands found in: '{command}'")
+                        msg = f"No valid commands found in: '{command}'"
+                        log_message(msg)
             
             prevProcessTime = currentTime
 
@@ -148,16 +160,24 @@ async def execute_command_chain(parsedCommands):
                 
                 # Check for shutdown signal
                 if result == "SHUTDOWN":
-                    log_event("Shutdown command received. Cleaning up and powering off Jetson...")
+                    msg = (
+                        "Shutdown command received. "
+                        "Cleaning up and powering off Jetson..."
+                    )
+                    log_event(msg)
                     await cleanup()
                     system_shutdown()
                     raise SystemExit(0)
         else:
             result = await execute_command(*parsedCommands[0])
-            
+
             # Check for shutdown signal
             if result == "SHUTDOWN":
-                log_event("Shutdown command received. Cleaning up and powering off Jetson...")
+                msg = (
+                    "Shutdown command received. "
+                    "Cleaning up and powering off Jetson..."
+                )
+                log_event(msg)
                 await cleanup()
                 system_shutdown()
                 raise SystemExit(0)
@@ -225,7 +245,11 @@ def system_shutdown():
         subprocess.run(["sudo", "shutdown", "-h", "now"], check=True)
     except subprocess.CalledProcessError as e:
         log_error("Failed to shutdown system", e)
-        log_message("Note: Ensure the script has passwordless sudo access for shutdown command.")
+        msg = (
+            "Note: Ensure the script has passwordless sudo access "
+            "for shutdown command."
+        )
+        log_message(msg)
     except Exception as e:
         log_error("Unexpected error during system shutdown", e)
 

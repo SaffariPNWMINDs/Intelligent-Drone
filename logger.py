@@ -2,8 +2,6 @@
 logger.py
 Handles asynchronous logging to file with timestamps.
 """
-import asyncio
-import os
 import queue
 import threading
 from datetime import datetime
@@ -70,8 +68,8 @@ def log_message(message, printToConsole=True):
         message: Message to log
         printToConsole: Whether to also print to console (default: True)
     """
-    # Generate timestamp
-    timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]  # Include milliseconds
+    # Generate timestamp [HH:MM:SS.mmm]
+    timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
     
     # Format log entry
     logEntry = f"[{timestamp}] {message}"
